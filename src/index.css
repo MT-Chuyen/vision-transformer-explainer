@@ -27,6 +27,17 @@ input {
   animation: block-swap 320ms ease;
 }
 
+.flow-run {
+  stroke-dasharray: 36 140;
+  animation: flow-run 1.3s linear infinite;
+}
+
+@keyframes flow-run {
+  to {
+    stroke-dashoffset: -176;
+  }
+}
+
 @keyframes block-swap {
   from {
     opacity: 0.35;

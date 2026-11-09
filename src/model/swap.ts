@@ -9,7 +9,7 @@ export type SwapRow = {
   gradients: number[];
 };
 
-type Activation = "gelu" | "relu" | "sigmoid" | "linear";
+export type Activation = "gelu" | "relu" | "sigmoid" | "linear";
 
 function activate(kind: Activation, value: number): number {
   if (kind === "gelu") return gelu(value);
@@ -138,11 +138,46 @@ function replay(
   };
 }
 
-export function architectureSwaps(model: ModelFile, pixels: Float32Array): { trueClass: string; rows: SwapRow[] } {
+export type SwapBasis = {
+  trueClass: string;
+  classIndex: number;
+  start: number[];
+  attention: number[][];
+};
+
+export function swapBasis(model: ModelFile, pixels: Float32Array): SwapBasis {
   const trace = forward(model, pixels, { mask: "full", dropout: 0, seed: 1 });
   const base = probabilities(trace.logits, 1);
   const classIndex = argmax(base);
-  const attention = trace.blocks.map((block) => block.droppedAttn[0]);
+  return {
+    trueClass: model.config.classes[classIndex],
+    classIndex,
+    start: trace.afterPos[0],
+    attention: trace.blocks.map((block) => block.droppedAttn[0]),
+  };
+}
+
+export function evaluateSwap(
+  model: ModelFile,
+  basis: SwapBasis,
+  kind: Activation,
+  residual: boolean,
+  skipScale: number,
+  label: string,
+  trained: boolean,
+): SwapRow {
+  const result = replay(model, basis.start, basis.attention, kind, residual, skipScale, basis.classIndex);
+  return {
+    label,
+    model: trained,
+    predicted: model.config.classes[result.predicted],
+    trueProb: result.trueProb,
+    gradients: result.gradients,
+  };
+}
+
+export function architectureSwaps(model: ModelFile, pixels: Float32Array): { trueClass: string; rows: SwapRow[] } {
+  const basis = swapBasis(model, pixels);
   const specs: { label: string; model: boolean; kind: Activation; residual: boolean; skipScale: number }[] = [
     { label: "GELU + skip", model: true, kind: "gelu", residual: true, skipScale: 1 },
     { label: "ReLU instead", model: false, kind: "relu", residual: true, skipScale: 1 },
@@ -150,15 +185,8 @@ export function architectureSwaps(model: ModelFile, pixels: Float32Array): { tru
     { label: "sigmoid, no skip", model: false, kind: "sigmoid", residual: false, skipScale: 1 },
     { label: "skip × 3", model: false, kind: "gelu", residual: true, skipScale: 3 },
   ];
-  const rows = specs.map((spec) => {
-    const result = replay(model, trace.afterPos[0], attention, spec.kind, spec.residual, spec.skipScale, classIndex);
-    return {
-      label: spec.label,
-      model: spec.model,
-      predicted: model.config.classes[result.predicted],
-      trueProb: result.trueProb,
-      gradients: result.gradients,
-    };
-  });
-  return { trueClass: model.config.classes[classIndex], rows };
+  return {
+    trueClass: basis.trueClass,
+    rows: specs.map((spec) => evaluateSwap(model, basis, spec.kind, spec.residual, spec.skipScale, spec.label, spec.model)),
+  };
 }

@@ -138,9 +138,23 @@ export function Stage({
     };
   }, [expanded, block, head, mask, pixels]);
 
+  const [sweeping, setSweeping] = useState(false);
   const keyToken = hover ?? token;
   const score = current.scores[head][token][keyToken];
   const weight = current.weights[head][token][keyToken];
+
+  useEffect(() => {
+    if (!sweeping) return;
+    const id = window.setInterval(() => {
+      setToken(token >= names.length - 1 ? 0 : token + 1);
+    }, 480);
+    return () => window.clearInterval(id);
+  }, [sweeping, token, names.length, setToken]);
+
+  function follow(next: number) {
+    setSweeping(false);
+    setToken(next);
+  }
 
   return (
     <div ref={scroller} className="relative overflow-x-auto">
@@ -166,7 +180,8 @@ export function Stage({
               stroke={step.color}
               strokeWidth={22}
               fill="none"
-              opacity={lit ? 0.45 : 0.08}
+              className={lit ? "flow-run" : undefined}
+              opacity={lit ? 0.55 : 0.08}
             />
           );
         })}
@@ -183,10 +198,22 @@ export function Stage({
           onToggle={() => setExpanded(expanded === "embedding" ? null : "embedding")}
           onEnter={() => setHoverStep("embedding")}
         >
-          <Picture pixels={pixels} imageSize={imageSize} patch={patchSize} overlay={overlay} grid display={expanded === "embedding" ? 220 : 148} onPick={setToken} />
-          <p className="mt-2 text-[11px] leading-4 text-slate-500">
-            {names[token].name === "CLS" ? "CLS is selected. It is not a patch." : `Patch ${names[token].name} is selected.`} Darker violet means a larger share of this head. CLS gets {(current.weights[head][token][0] * 100).toFixed(1)}%.
+          <Picture
+            pixels={pixels}
+            imageSize={imageSize}
+            patch={patchSize}
+            overlay={overlay}
+            grid
+            display={expanded === "embedding" ? 220 : 148}
+            onPick={follow}
+            onMove={follow}
+          />
+          <p data-testid="probe" className="mt-2 text-[11px] leading-4 text-slate-500">
+            {names[token].name === "CLS" ? "CLS is selected. It is not a patch." : `Patch ${names[token].name} is selected.`} Move across the picture and the rest of the diagram follows. Darker violet means a larger share of this head. CLS gets {(current.weights[head][token][0] * 100).toFixed(1)}%.
           </p>
+          <button type="button" className="mt-2 text-[11px] font-semibold text-indigo-600" onClick={() => setSweeping((value) => !value)}>
+            {sweeping ? "Stop sweep" : "Sweep patches"}
+          </button>
           <div className="mt-3">
             <TokenStack rows={trace.afterPos} selected={token} onSelect={setToken} tone="#c084fc" labels={labels} />
           </div>
@@ -293,8 +320,11 @@ export function Stage({
                 colLabels={expanded === "attention" ? labels : undefined}
                 selectedRow={token}
                 selectedCol={hover}
-                onHover={(_row, col) => setHover(col)}
-                onPick={setToken}
+                onHover={(row, col) => {
+                  setHover(col);
+                  if (row >= 0) follow(row);
+                }}
+                onPick={follow}
                 cell={expanded === "attention" ? 20 : 9}
                 domain="unit"
               />

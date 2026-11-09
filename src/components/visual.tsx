@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 
 export function meanAbs(rows: number[][]): number {
   let total = 0;
@@ -59,7 +59,7 @@ export function TokenStack({
           className={`flex w-[16px] flex-col items-center gap-1 ${selected === index ? "opacity-100" : "opacity-80 hover:opacity-100"}`}
         >
           <span
-            className={`block w-[10px] rounded-sm ${selected === index ? "outline outline-2 outline-offset-1 outline-slate-900" : ""}`}
+            className={`block w-[10px] rounded-sm transition-transform duration-200 ${selected === index ? "scale-110 outline outline-2 outline-offset-1 outline-slate-900" : ""}`}
             style={{ height: 112, background: vectorStyle(row, tone) }}
           />
           <span className="text-[8px] leading-none text-slate-400">{index === 0 ? "C" : index}</span>
@@ -189,7 +189,7 @@ export function ProbabilityBars({
           <span className={index === best ? "font-semibold text-slate-900" : "text-slate-500"}>{label}</span>
           <span className="h-2 overflow-hidden rounded-full bg-slate-100">
             <span
-              className={`block h-full rounded-full ${pool[index] ? "bg-indigo-500" : "bg-slate-300"} ${sampled === index ? "outline outline-2 outline-offset-1 outline-amber-500" : ""}`}
+              className={`block h-full rounded-full transition-[width] duration-300 ${pool[index] ? "bg-indigo-500" : "bg-slate-300"} ${sampled === index ? "outline outline-2 outline-offset-1 outline-amber-500" : ""}`}
               style={{ width: `${Math.max(2, probs[index] * 100)}%` }}
             />
           </span>
@@ -359,6 +359,7 @@ export function Picture({
   grid,
   display,
   onPick,
+  onMove,
 }: {
   pixels: ArrayLike<number>;
   imageSize: number;
@@ -367,6 +368,7 @@ export function Picture({
   grid: boolean;
   display: number;
   onPick?: (token: number) => void;
+  onMove?: (token: number) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -378,20 +380,29 @@ export function Picture({
       ref={ref}
       width={display}
       height={display}
-      className="rounded-md bg-slate-900"
+      className={`rounded-md bg-slate-900 ${onMove ? "cursor-crosshair" : ""}`}
       style={{ width: display, height: display, imageRendering: "pixelated" }}
       onClick={(event) => {
-        if (!onPick) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        const x = Math.min(imageSize - 1, Math.max(0, Math.floor(((event.clientX - rect.left) / rect.width) * imageSize)));
-        const y = Math.min(imageSize - 1, Math.max(0, Math.floor(((event.clientY - rect.top) / rect.height) * imageSize)));
-        const col = Math.floor(x / patch);
-        const row = Math.floor(y / patch);
-        const gridSize = imageSize / patch;
-        onPick(1 + row * gridSize + col);
+        const token = patchToken(event, imageSize, patch);
+        if (token !== null) onPick?.(token);
+      }}
+      onPointerMove={(event) => {
+        if (!onMove) return;
+        const token = patchToken(event, imageSize, patch);
+        if (token !== null) onMove(token);
       }}
     />
   );
+}
+
+function patchToken(event: MouseEvent<HTMLCanvasElement>, imageSize: number, patch: number): number | null {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const x = Math.min(imageSize - 1, Math.max(0, Math.floor(((event.clientX - rect.left) / rect.width) * imageSize)));
+  const y = Math.min(imageSize - 1, Math.max(0, Math.floor(((event.clientY - rect.top) / rect.height) * imageSize)));
+  const col = Math.floor(x / patch);
+  const row = Math.floor(y / patch);
+  return 1 + row * (imageSize / patch) + col;
 }
 
 export function PopCard({
